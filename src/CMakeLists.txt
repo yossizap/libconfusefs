@@ -3,8 +3,8 @@ project(libConfuseFS VERSION 0.1.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_CXX_FLAGS ${CMAKE_CXX_FLAGS} "-O3 -Wall -Wextra -pedantic -Wrestrict \
-    -Wlogical-op -Wduplicated-branches -Wduplicated-cond -Wnull-dereference -Wold-style-cast \
-    -Wuseless-cast -Wjump-misses-init -Wdouble-promotion -Wshadow -Wformat=2")
+    -Wlogical-op -Wduplicated-branches -Wduplicated-cond -Wnull-dereference
+    -Wuseless-cast -Wdouble-promotion -Wshadow -Wformat=2")
 
 find_package(FUSE3 REQUIRED)
 
