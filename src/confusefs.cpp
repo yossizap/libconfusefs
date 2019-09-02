@@ -3,9 +3,9 @@
 #include <errno.h>
 #include <fuse.h>
 #include <fuse_lowlevel.h>
+#include <syslog.h>
 #include <cstdlib>
 #include <map>
-#include <syslog.h>
 
 #include "jconf/jconf.hpp"
 #include "nlohmann/json.hpp"
@@ -14,8 +14,8 @@
 
 using json = nlohmann::json;
 
-namespace confusefs { 
-
+namespace confusefs
+{
 confusefs::confusefs(jconf::Config* configuration) : m_config(configuration)
 {
     /* Initialize fuse ops struct */
@@ -49,8 +49,8 @@ int confusefs::start_async(std::string mountpoint)
         return ret;
     }
 
-    /* Pass 'this' as userdata to access the class' utility functions and members from 
-     * the static functions */
+    /* Pass 'this' as userdata to access the class' utility functions and
+     * members from the static functions */
     m_session = fuse_session_new(&args, &m_oper, sizeof(m_oper), (void*)this);
     if (m_session == NULL)
     {
@@ -92,25 +92,39 @@ int confusefs::handle_event(void)
 
     fbuf.mem = NULL;
 
-    if (fuse_session_exited(m_session))
-        return -1;
+    ret = fuse_session_exited(m_session);
+    if (ret)
+    {
+        goto out;
+    }
 
     ret = fuse_session_receive_buf(m_session, &fbuf);
     /* Empty request */
     if (ret == 0)
     {
-        return 0;
+        goto out;
     }
     else if (ret < 0)
     {
-        syslog(LOG_ERR, "fuse_session_receive_buf failed: %s\n", strerror(errno));
-        stop();
-        return -1;
+        syslog(LOG_ERR, "fuse_session_receive_buf failed: %s\n",
+               strerror(errno));
+        goto out;
     }
 
     fuse_session_process_buf(m_session, &fbuf);
 
-    return 0;
+out:
+    if (NULL != fbuf.mem)
+    {
+        free(fbuf.mem);
+    }
+
+    if (!ret)
+    {
+        stop();
+    }
+
+    return ret;
 }
 
 void confusefs::init_inodes(const json& j,
@@ -136,7 +150,7 @@ void confusefs::init_inodes(const json& j,
 void confusefs::init(void* userdata, struct fuse_conn_info* conn)
 {
     (void)conn;
-    auto klass = (confusefs*)userdata; 
+    auto klass = (confusefs*)userdata;
 
     json j = klass->m_config->get("/");
     fuse_ino_t i = 1;
@@ -208,7 +222,8 @@ void confusefs::lookup(fuse_req_t req, fuse_ino_t parent, const char* name)
 
     path += "/" + std::string(name);
 
-    /* Attempt to find a matching file path in the inodes structure  to get the inode */
+    /* Attempt to find a matching file path in the inodes structure  to get the
+     * inode */
     bool match = false;
     for (auto it = klass->m_inodes.begin(); it != klass->m_inodes.end(); ++it)
     {
@@ -233,14 +248,14 @@ void confusefs::lookup(fuse_req_t req, fuse_ino_t parent, const char* name)
 }
 
 void confusefs::dirbuf_add(fuse_req_t req,
-                       std::vector<char> &dirbuf,
-                       const char* name,
-                       fuse_ino_t ino)
+                           std::vector<char>& dirbuf,
+                           const char* name,
+                           fuse_ino_t ino)
 {
     struct stat stbuf;
     size_t oldsize = dirbuf.size();
 
-    /* FUSE aligns the size of buffers and adds metadata to each name 
+    /* FUSE aligns the size of buffers and adds metadata to each name
      * so we have to check the size of the entry */
     size_t direntry_size = fuse_add_direntry(req, NULL, 0, name, NULL, 0);
     dirbuf.resize(dirbuf.size() + direntry_size);
@@ -252,10 +267,10 @@ void confusefs::dirbuf_add(fuse_req_t req,
 }
 
 int confusefs::reply_buf_limited(fuse_req_t req,
-                             const char* buf,
-                             size_t bufsize,
-                             off_t off,
-                             size_t maxsize)
+                                 const char* buf,
+                                 size_t bufsize,
+                                 off_t off,
+                                 size_t maxsize)
 {
     if (off < bufsize)
         return fuse_reply_buf(req, buf + off, std::min(bufsize - off, maxsize));
@@ -361,4 +376,4 @@ void confusefs::write(fuse_req_t req,
 
     fuse_reply_write(req, size);
 }
-} // namespace confusefs
+}  // namespace confusefs
