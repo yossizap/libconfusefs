@@ -232,31 +232,23 @@ void confusefs::lookup(fuse_req_t req, fuse_ino_t parent, const char* name)
     fuse_reply_entry(req, &e);
 }
 
-struct dirbuf
-{
-    char* p;
-    size_t size;
-};
-
 void confusefs::dirbuf_add(fuse_req_t req,
-                       dirbuf* b,
+                       std::vector<char> &dirbuf,
                        const char* name,
                        fuse_ino_t ino)
 {
     struct stat stbuf;
-    size_t oldsize = b->size;
+    size_t oldsize = dirbuf.size();
 
     /* FUSE aligns the size of buffers and adds metadata to each name 
      * so we have to check the size of the entry */
-    b->size += fuse_add_direntry(req, NULL, 0, name, NULL, 0);
-
-    b->p = (char*)realloc(b->p, b->size);
-    memset(&stbuf, 0, sizeof(stbuf));
+    size_t direntry_size = fuse_add_direntry(req, NULL, 0, name, NULL, 0);
+    dirbuf.resize(dirbuf.size() + direntry_size);
 
     stbuf.st_ino = ino;
 
-    fuse_add_direntry(req, b->p + oldsize, b->size - oldsize, name, &stbuf,
-                      b->size);
+    fuse_add_direntry(req, dirbuf.data() + oldsize, direntry_size, name, &stbuf,
+                      dirbuf.size());
 }
 
 int confusefs::reply_buf_limited(fuse_req_t req,
@@ -289,16 +281,14 @@ void confusefs::readdir(fuse_req_t req,
         return;
     }
 
-    struct dirbuf b;
-    memset(&b, 0, sizeof(b));
-    klass->dirbuf_add(req, &b, "..", 1);
+    std::vector<char> dirbuf;
+    klass->dirbuf_add(req, dirbuf, "..", 1);
     for (auto it = j.begin(); it != j.end(); ++it)
     {
-        klass->dirbuf_add(req, &b, it.key().c_str(), ino++);
+        klass->dirbuf_add(req, dirbuf, it.key().c_str(), ino++);
     }
 
-    klass->reply_buf_limited(req, b.p, b.size, off, size);
-    free(b.p);
+    klass->reply_buf_limited(req, dirbuf.data(), dirbuf.size(), off, size);
 }
 
 void confusefs::open(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info* fi)

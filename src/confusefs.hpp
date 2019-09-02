@@ -66,7 +66,7 @@ class confusefs
             off_t off,
             size_t maxsize);
     void dirbuf_add(fuse_req_t req,
-            struct dirbuf* b,
+            std::vector<char> &dirbuf,
             const char* name,
             fuse_ino_t ino);
     void init_inodes(const json& j,
