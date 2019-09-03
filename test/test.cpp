@@ -13,6 +13,7 @@
 #include <iostream>
 #include <map>
 #include <fstream>
+#include <thread>
 
 #include <fuse.h>
 #include <fuse_lowlevel.h>
@@ -43,7 +44,12 @@ static void poll_callback(uv_poll_t* handle, int status, int events)
 {
     auto confusefs = (confusefs::confusefs *)handle->data;
 
-    confusefs->handle_event();
+    int ret = confusefs->handle_event();
+    if (0 > ret)
+    {
+        cout << "Stopping poll loop, error: " << ret << endl;
+        uv_poll_stop(handle);
+    }
 }
 
 
@@ -79,10 +85,9 @@ static int poll_loop(int session_fd, confusefs::confusefs *confusefs)
     }
 
     res = uv_loop_close(uv_default_loop());
-    if (res)
+    if (res == UV_EBUSY)
     {
-        cerr << "Failed to close uv loop: " << uv_err_name(res) 
-                                    << uv_strerror(res) << endl;
+        uv_walk(uv_default_loop(), on_uv_walk, NULL);
     }
 
     return res;
@@ -100,13 +105,19 @@ int main(int argc, const char *argv[])
     auto config = new jconf::Config("./config.json", "./schema.json");
 
     cout << "Initializing confusefs..." << endl;
-    auto conf = new confusefs::confusefs(config); 
-    int session_fd = conf->start_async(argv[1]);
+    auto conffs = new confusefs::confusefs(config); 
 
-    cout << "Starting main loop..." << endl;
-    poll_loop(session_fd, conf);
+    cout << "Starting async loop..." << endl;
+    int session_fd = conffs->start_async(argv[1]);
+    poll_loop(session_fd, conffs);
 
-    delete conf;
+    conffs->stop();
+
+    cout << "Starting blocking loop..." << endl;
+    std::thread t1(&confusefs::confusefs::start, conffs, argv[1]);
+    t1.join();
+
+    delete conffs;
     delete config;
 
     return 0;

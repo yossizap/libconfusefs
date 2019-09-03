@@ -16,7 +16,7 @@ using json = nlohmann::json;
 
 namespace confusefs
 {
-confusefs::confusefs(jconf::Config* configuration) : m_config(configuration)
+confusefs::confusefs(jconf::Config *configuration) : m_config(configuration)
 {
     /* Initialize fuse ops struct */
     m_oper.getattr = confusefs::getattr;
@@ -36,13 +36,13 @@ confusefs::~confusefs()
     stop();
 }
 
-int confusefs::start_async(std::string mountpoint)
+int confusefs::init_session(const std::string &mountpoint)
 {
     struct fuse_cmdline_opts opts;
     int ret = -1;
 
-    const char* fuse_args[] = {"confusefs", mountpoint.c_str()};
-    struct fuse_args args = FUSE_ARGS_INIT(2, (char**)fuse_args);
+    const char *fuse_args[] = {"confusefs", mountpoint.c_str()};
+    struct fuse_args args = FUSE_ARGS_INIT(2, (char **)fuse_args);
 
     if (fuse_parse_cmdline(&args, &opts) != 0)
     {
@@ -51,25 +51,46 @@ int confusefs::start_async(std::string mountpoint)
 
     /* Pass 'this' as userdata to access the class' utility functions and
      * members from the static functions */
-    m_session = fuse_session_new(&args, &m_oper, sizeof(m_oper), (void*)this);
+    m_session = fuse_session_new(&args, &m_oper, sizeof(m_oper), (void *)this);
     if (m_session == NULL)
     {
-        return 1;
+        ret = -1;
+        goto out;
     }
 
-    if (fuse_set_signal_handlers(m_session) != 0)
+    ret = fuse_set_signal_handlers(m_session);
+    if (ret)
     {
-        return 1;
+        goto out;
     }
 
-    if (fuse_session_mount(m_session, opts.mountpoint) != 0)
+    ret = fuse_session_mount(m_session, opts.mountpoint);
+    if (ret)
     {
-        return 1;
+        goto out;
     }
+
+out:
+    if (NULL != opts.mountpoint)
+        free(opts.mountpoint);
+
+    return ret;
+}
+
+int confusefs::start(const std::string &mountpoint)
+{
+    init_session(mountpoint);
+
+    int ret = fuse_session_loop(m_session);
+
+    return ret;
+}
+
+int confusefs::start_async(const std::string &mountpoint)
+{
+    init_session(mountpoint);
 
     m_session_fd = fuse_session_fd(m_session);
-
-    free(opts.mountpoint);
 
     return m_session_fd;
 }
@@ -78,6 +99,7 @@ int confusefs::stop(void)
 {
     if (NULL != m_session)
     {
+        fuse_session_exit(m_session);
         fuse_session_unmount(m_session);
         fuse_remove_signal_handlers(m_session);
         fuse_session_destroy(m_session);
@@ -90,7 +112,7 @@ int confusefs::handle_event(void)
     int ret = 0;
     struct fuse_buf fbuf;
 
-    fbuf.mem = NULL;
+    bzero(&fbuf, sizeof(fbuf));
 
     ret = fuse_session_exited(m_session);
     if (ret)
@@ -127,9 +149,9 @@ out:
     return ret;
 }
 
-void confusefs::init_inodes(const json& j,
+void confusefs::init_inodes(const json &j,
                             const std::string path_prefix,
-                            fuse_ino_t& inode)
+                            fuse_ino_t &inode)
 {
     for (auto it = j.begin(); it != j.end(); ++it)
     {
@@ -147,10 +169,10 @@ void confusefs::init_inodes(const json& j,
     }
 }
 
-void confusefs::init(void* userdata, struct fuse_conn_info* conn)
+void confusefs::init(void *userdata, struct fuse_conn_info *conn)
 {
     (void)conn;
-    auto klass = (confusefs*)userdata;
+    auto klass = (confusefs *)userdata;
 
     json j = klass->m_config->get("/");
     fuse_ino_t i = 1;
@@ -159,7 +181,7 @@ void confusefs::init(void* userdata, struct fuse_conn_info* conn)
     klass->init_inodes(j, "/", i);
 }
 
-int confusefs::stat(fuse_ino_t ino, struct stat* stbuf)
+int confusefs::stat(fuse_ino_t ino, struct stat *stbuf)
 {
     stbuf->st_ino = ino;
     if (1 == ino)
@@ -188,10 +210,10 @@ int confusefs::stat(fuse_ino_t ino, struct stat* stbuf)
 
 void confusefs::getattr(fuse_req_t req,
                         fuse_ino_t ino,
-                        struct fuse_file_info* fi)
+                        struct fuse_file_info *fi)
 {
     struct stat stbuf;
-    auto klass = (confusefs*)fuse_req_userdata(req);
+    auto klass = (confusefs *)fuse_req_userdata(req);
 
     syslog(LOG_DEBUG, "getattr\n");
 
@@ -204,10 +226,10 @@ void confusefs::getattr(fuse_req_t req,
         fuse_reply_attr(req, &stbuf, 1.0);
 }
 
-void confusefs::lookup(fuse_req_t req, fuse_ino_t parent, const char* name)
+void confusefs::lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
 {
     struct fuse_entry_param e;
-    auto klass = (confusefs*)fuse_req_userdata(req);
+    auto klass = (confusefs *)fuse_req_userdata(req);
     std::string path;
 
     syslog(LOG_DEBUG, "lookup\n");
@@ -248,8 +270,8 @@ void confusefs::lookup(fuse_req_t req, fuse_ino_t parent, const char* name)
 }
 
 void confusefs::dirbuf_add(fuse_req_t req,
-                           std::vector<char>& dirbuf,
-                           const char* name,
+                           std::vector<char> &dirbuf,
+                           const char *name,
                            fuse_ino_t ino)
 {
     struct stat stbuf;
@@ -267,7 +289,7 @@ void confusefs::dirbuf_add(fuse_req_t req,
 }
 
 int confusefs::reply_buf_limited(fuse_req_t req,
-                                 const char* buf,
+                                 const char *buf,
                                  size_t bufsize,
                                  off_t off,
                                  size_t maxsize)
@@ -282,10 +304,10 @@ void confusefs::readdir(fuse_req_t req,
                         fuse_ino_t ino,
                         size_t size,
                         off_t off,
-                        struct fuse_file_info* fi)
+                        struct fuse_file_info *fi)
 {
     (void)fi;
-    auto klass = (confusefs*)fuse_req_userdata(req);
+    auto klass = (confusefs *)fuse_req_userdata(req);
 
     syslog(LOG_DEBUG, "readdir\n");
 
@@ -306,10 +328,10 @@ void confusefs::readdir(fuse_req_t req,
     klass->reply_buf_limited(req, dirbuf.data(), dirbuf.size(), off, size);
 }
 
-void confusefs::open(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info* fi)
+void confusefs::open(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
 {
     (void)ino;
-    auto klass = (confusefs*)fuse_req_userdata(req);
+    auto klass = (confusefs *)fuse_req_userdata(req);
 
     syslog(LOG_DEBUG, "open\n");
 
@@ -327,10 +349,10 @@ void confusefs::read(fuse_req_t req,
                      fuse_ino_t ino,
                      size_t size,
                      off_t off,
-                     struct fuse_file_info* fi)
+                     struct fuse_file_info *fi)
 {
     (void)fi;
-    auto klass = (confusefs*)fuse_req_userdata(req);
+    auto klass = (confusefs *)fuse_req_userdata(req);
 
     syslog(LOG_DEBUG, "read\n");
 
@@ -341,13 +363,13 @@ void confusefs::read(fuse_req_t req,
 
 void confusefs::write(fuse_req_t req,
                       fuse_ino_t ino,
-                      const char* buf,
+                      const char *buf,
                       size_t size,
                       off_t off,
-                      struct fuse_file_info* fi)
+                      struct fuse_file_info *fi)
 {
     (void)fi, (void)ino, (void)off;
-    auto klass = (confusefs*)fuse_req_userdata(req);
+    auto klass = (confusefs *)fuse_req_userdata(req);
     json value;
 
     syslog(LOG_DEBUG, "write\n");
@@ -356,7 +378,7 @@ void confusefs::write(fuse_req_t req,
     {
         value = json::parse(buf, buf + size);
     }
-    catch (const std::exception& e)
+    catch (const std::exception &e)
     {
         fuse_reply_err(req, EBADMSG);
         syslog(LOG_ERR, "Write - parse failed\n");
@@ -367,7 +389,7 @@ void confusefs::write(fuse_req_t req,
     {
         klass->m_config->set(klass->m_inodes[ino], value);
     }
-    catch (const std::exception& e)
+    catch (const std::exception &e)
     {
         fuse_reply_err(req, ENOENT);
         syslog(LOG_ERR, "Write - path not found\n");
