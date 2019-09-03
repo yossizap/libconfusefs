@@ -16,7 +16,8 @@ using json = nlohmann::json;
 
 namespace confusefs
 {
-confusefs::confusefs(jconf::Config *configuration, const std::string &mountpoint)
+confusefs::confusefs(jconf::Config *configuration,
+                     const std::string &mountpoint)
     : m_config(configuration), m_mountpoint(mountpoint)
 {
     /* Initialize fuse ops struct */
@@ -390,7 +391,7 @@ void confusefs::write(fuse_req_t req,
                       off_t off,
                       struct fuse_file_info *fi)
 {
-    (void)fi, (void)ino, (void)off;
+    (void)fi, (void)off;
     auto klass = (confusefs *)fuse_req_userdata(req);
     json value;
 
@@ -403,13 +404,23 @@ void confusefs::write(fuse_req_t req,
     catch (const std::exception &e)
     {
         fuse_reply_err(req, EBADMSG);
-        syslog(LOG_ERR, "Write - parse failed\n");
+        syslog(LOG_ERR, "%s - parse failed\n", __FILE__);
+        return;
+    }
+
+    auto target_key = klass->m_inodes[ino];
+    auto target = klass->m_config->get(target_key);
+
+    if (value.type() != target.type())
+    {
+        fuse_reply_err(req, EBADMSG);
+        syslog(LOG_ERR, "%s - invalid variable type\n", __FILE__);
         return;
     }
 
     try
     {
-        klass->m_config->set(klass->m_inodes[ino], value);
+        klass->m_config->set(target_key, value);
     }
     catch (const std::exception &e)
     {

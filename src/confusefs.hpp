@@ -11,7 +11,6 @@
 
 namespace confusefs
 {
-
 using json = nlohmann::json;
 
 class confusefs
@@ -50,8 +49,8 @@ class confusefs
     int stop(void);
 
     /**
-     * Process FUSE events asynchronously. This function is supposed to be used when
-     * the fd from start_async is set.
+     * Process FUSE events asynchronously. This function is supposed to be used
+     * when the fd from start_async is set.
      *
      * @return 0 or a positive number of bytes processed or -errno on failure
      */
