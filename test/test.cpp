@@ -31,7 +31,7 @@ static void on_uv_walk(uv_handle_t* handle, void* arg)
     uv_close(handle, nullptr);
 }
 
-static void handle_signal(uv_signal_t *handle, int signum)
+static void on_uv_handle_signal(uv_signal_t *handle, int signum)
 {
     int result = uv_loop_close(handle->loop);
     if (result == UV_EBUSY)
@@ -60,10 +60,10 @@ static int poll_loop(int session_fd, confusefs::confusefs *confusefs)
     /* Setup signal handlers */
     uv_signal_t sigint, sigterm;
     uv_signal_init(uv_default_loop(), &sigint);
-    uv_signal_start(&sigint, handle_signal, SIGINT);
+    uv_signal_start(&sigint, on_uv_handle_signal, SIGINT);
 
     uv_signal_init(uv_default_loop(), &sigterm);
-    uv_signal_start(&sigterm, handle_signal, SIGTERM);
+    uv_signal_start(&sigterm, on_uv_handle_signal, SIGTERM);
 
     /* Signal handlers shouldn't keep the loop up in case the poll handle is closed */
     uv_unref((uv_handle_t*)&sigterm);
@@ -101,20 +101,22 @@ int main(int argc, const char *argv[])
         return EINVAL;
     }
 
+    mkdir(argv[1], 777);
+
     cout << "Creating JConf configuration..." << endl;
     auto config = new jconf::Config("./config.json", "./schema.json");
 
     cout << "Initializing confusefs..." << endl;
-    auto conffs = new confusefs::confusefs(config); 
+    auto conffs = new confusefs::confusefs(config, argv[1]); 
 
     cout << "Starting async loop..." << endl;
-    int session_fd = conffs->start_async(argv[1]);
+    int session_fd = conffs->start_async();
     poll_loop(session_fd, conffs);
 
     conffs->stop();
 
     cout << "Starting blocking loop..." << endl;
-    std::thread t1(&confusefs::confusefs::start, conffs, argv[1]);
+    std::thread t1(&confusefs::confusefs::start, conffs);
     t1.join();
 
     delete conffs;

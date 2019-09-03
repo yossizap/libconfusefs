@@ -9,14 +9,19 @@
 #include "jconf/jconf.hpp"
 #include "nlohmann/json.hpp"
 
-using json = nlohmann::json;
-
 namespace confusefs
 {
+
+using json = nlohmann::json;
+
 class confusefs
 {
    public:
-    confusefs(jconf::Config *config);
+    /**
+     * @param config initialized jconf configuration that will be mounted
+     * @param mountpoint filesystem mount path
+     */
+    confusefs(jconf::Config *config, const std::string &mountpoint);
     ~confusefs();
 
     /**
@@ -27,25 +32,26 @@ class confusefs
      * @param mountpoint filesystem mount path
      * @return a file descriptor
      */
-    int start_async(const std::string &mountpoint);
+    int start_async(void);
 
     /**
-     * Mount the filesystem
+     * Mount the filesystem and block to process the file system's requests
      *
      * @param mountpoint filesystem mount path
      * @return a file descriptor
      */
-    int start(const std::string &mountpoint);
+    int start(void);
 
     /**
-     * Stops/umounts the filesystem.
+     * Stop the session and unmount the filesystem.
      *
      * @return negative value on failure
      */
     int stop(void);
 
     /**
-     * Process FUSE events asynchronously.
+     * Process FUSE events asynchronously. This function is supposed to be used when
+     * the fd from start_async is set.
      *
      * @return 0 or a positive number of bytes processed or -errno on failure
      */
@@ -54,6 +60,12 @@ class confusefs
    private:
     /** JSON Schema configuration used to create the filesystem */
     jconf::Config *m_config;
+
+    /** FUSE mountpoint */
+    const std::string m_mountpoint;
+
+    /** Indicates if there's a session in progress */
+    bool m_running;
 
     /** FUSE low level operations struct */
     struct fuse_lowlevel_ops m_oper;
@@ -67,7 +79,12 @@ class confusefs
     /** Current session file descriptor */
     int m_session_fd;
 
-    int init_session(const std::string &mountpoint);
+    /**
+     * Initialize a fuse session.
+     *
+     * @return negative value on failure
+     */
+    int init_session(void);
 
     /* FUSE utility functions */
     int reply_buf_limited(fuse_req_t req,

@@ -16,7 +16,8 @@ using json = nlohmann::json;
 
 namespace confusefs
 {
-confusefs::confusefs(jconf::Config *configuration) : m_config(configuration)
+confusefs::confusefs(jconf::Config *configuration, const std::string &mountpoint)
+    : m_config(configuration), m_mountpoint(mountpoint)
 {
     /* Initialize fuse ops struct */
     m_oper.getattr = confusefs::getattr;
@@ -36,12 +37,12 @@ confusefs::~confusefs()
     stop();
 }
 
-int confusefs::init_session(const std::string &mountpoint)
+int confusefs::init_session(void)
 {
     struct fuse_cmdline_opts opts;
     int ret = -1;
 
-    const char *fuse_args[] = {"confusefs", mountpoint.c_str()};
+    const char *fuse_args[] = {"confusefs", m_mountpoint.c_str()};
     struct fuse_args args = FUSE_ARGS_INIT(2, (char **)fuse_args);
 
     if (fuse_parse_cmdline(&args, &opts) != 0)
@@ -77,20 +78,38 @@ out:
     return ret;
 }
 
-int confusefs::start(const std::string &mountpoint)
+int confusefs::start(void)
 {
-    init_session(mountpoint);
+    if (m_running)
+    {
+        syslog(LOG_ERR, "Session already in progress\n");
+        return -1;
+    }
+
+    init_session();
+
+    m_running = true;
 
     int ret = fuse_session_loop(m_session);
+
+    m_running = false;
 
     return ret;
 }
 
-int confusefs::start_async(const std::string &mountpoint)
+int confusefs::start_async(void)
 {
-    init_session(mountpoint);
+    if (m_running)
+    {
+        syslog(LOG_ERR, "Session already in progress\n");
+        return -1;
+    }
+
+    init_session();
 
     m_session_fd = fuse_session_fd(m_session);
+    if (m_session_fd > 0)
+        m_running = true;
 
     return m_session_fd;
 }
@@ -104,6 +123,9 @@ int confusefs::stop(void)
         fuse_remove_signal_handlers(m_session);
         fuse_session_destroy(m_session);
     }
+
+    m_running = false;
+
     return 0;
 }
 
