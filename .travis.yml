@@ -1,0 +1,53 @@
+compiler: gcc
+
+dist: xenial
+os: linux
+
+language:
+    - python
+    - cpp
+python:
+    - "3.7"
+
+sudo:
+    - required
+
+addons:
+  apt:
+    sources:
+      - ubuntu-toolchain-r-test
+    packages:
+      - g++-7
+      - cmake
+      - pkg-config
+      - ninja-build
+      - python3-pip
+      - libuv1
+      - libuv1-dev
+
+before_install:
+  - pip3 install --upgrade pip
+  - pip3 install meson
+  - wget https://github.com/libfuse/libfuse/archive/master.zip
+  - unzip master.zip
+  - cd libfuse-master
+  - mkdir build
+  - cd build
+  - meson ..
+  - ninja
+  - sudo ninja install
+  - test -e /usr/local/lib/pkgconfig || sudo mkdir /usr/local/lib/pkgconfig
+  - sudo mv /usr/local/lib/*/pkgconfig/* /usr/local/lib/pkgconfig/
+  - ls -d1 /usr/local/lib/*-linux-gnu | sudo tee /etc/ld.so.conf.d/usrlocal.conf
+  - cd ../../
+  - meson --version
+  - ninja --version
+  - python3 --version
+  - cmake --version
+
+script:
+  - sudo ldconfig
+  - mkdir build && cd build
+  - cmake ..
+  - cmake --build .
+  - cd ..
