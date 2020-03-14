@@ -225,7 +225,7 @@ int confusefs::stat(fuse_ino_t ino, struct stat *stbuf)
     {
         stbuf->st_mode = S_IFREG | 0444;
         stbuf->st_nlink = 1;
-        stbuf->st_size = m_inodes[ino].length();
+        stbuf->st_size = MAX_READ_DATA_SIZE;
     }
 
     return 0;
