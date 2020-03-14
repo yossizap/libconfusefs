@@ -131,3 +131,6 @@ fabric.properties
 # VSCode
 *.code-workspace
 .vscode
+
+# VIM
+*.swp

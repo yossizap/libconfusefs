@@ -13,6 +13,23 @@ namespace confusefs
 {
 using json = nlohmann::json;
 
+/*
+ * The Linux kernel has a state-machine which limits the data size that can be
+ * returned from the syscall `read` to the minimal size of the following sizes:
+ *  1) the size the user whom invoked the syscall, i.e. the `count` argument to
+ *     `read` syscall.
+ *  2) the actual size of the file.
+ *  3) the size of the file as stated in `stat` syscall, it's only logical to
+ *     limit the size which can be returned from `read` to the size which had been
+ *     stated earlier in the dedicated syscall to tell the size of  the file...
+ *  This constant will be used as the size stated in `stat` syscall since we
+ *  can't determine the size of a configuration file from the schema all the
+ *  time (some field are not bounded by any limit, such as strings with
+ *  maxlength and big-nums, i.e. integers).
+ *  As a result the size of a configuration file will be limited to 256 bytes.
+ */
+constexpr unsigned int MAX_READ_DATA_SIZE = 256;
+
 class confusefs
 {
    public:
